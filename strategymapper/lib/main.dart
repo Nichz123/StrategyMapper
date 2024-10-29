@@ -1,5 +1,14 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_painter_v2/flutter_painter.dart';
+import 'package:flutter_painter_v2/flutter_painter_extensions.dart';
+import 'package:flutter_painter_v2/flutter_painter_pure.dart';
+import 'dart:developer';
+import 'package:scribble/scribble.dart';
+import 'package:window_paint/window_paint.dart';
+import 'dart:ui' as ui;
 void main() {
   runApp(const MyApp());
 }
@@ -10,9 +19,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      home: Scaffold(
-        body: MapScreen(),
-      ),
+      home: MapScreen(),
+        restorationScopeId: 'root'
     );
   }
 }
@@ -22,21 +30,23 @@ class MapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Map View fills the entire screen
-        const Positioned.fill(
-          child: MapView(),
-        ),
-
-        // Control Panel overlaps on the left side
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          child: ControlPanel(),
-        ),
-      ],
+    return const Scaffold(
+      body: Stack(
+        children: [
+          // Map View fills the entire screen
+           Positioned.fill(
+            child: MapView(),
+          ),
+      
+          // Control Panel overlaps on the left side
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: ControlPanel(),
+          ),
+        ],
+      )
     );
   }
 }
@@ -48,9 +58,18 @@ class MapView extends StatefulWidget {
   MapViewState createState() => MapViewState();
 }
 
-class MapViewState extends State<MapView> {
+class MapViewState extends State<MapView> with RestorationMixin{
   final List<HeroData> _heroesOnMap = [];
   final GlobalKey _mapKey = GlobalKey();
+  late final RestorableWindowPaintController _controller;
+
+  final adapters = <DrawObjectAdapter>[
+    const PanZoomAdapter(),
+    const DrawPencilAdapter(
+      width: 2.0,
+    ),
+  ];
+
 
   // Convert global position to local map coordinates
   Offset _getLocalPosition(Offset globalPosition) {
@@ -66,14 +85,35 @@ class MapViewState extends State<MapView> {
   }
 
   @override
+void initState() {
+  super.initState();
+  _controller = RestorableWindowPaintController(
+    adapters,
+    initialColor: Colors.red,
+  );
+}
+@override
+void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+  registerForRestoration(_controller, 'controller');
+}
+
+
+
+  @override
+void dispose() {
+  _controller.dispose();
+  super.dispose();
+}
+
+
+  @override
   Widget build(BuildContext context) {
-    return InteractiveViewer(
-      constrained: true,
-      boundaryMargin: EdgeInsets.zero,
-      minScale: 1.0,
-      maxScale: 5.0,
-      clipBehavior: Clip.none,
-      child: DragTarget<HeroData>(
+      return WindowPaint(
+      controller: _controller.value,
+      maxScale: 10.0,
+      adapters: adapters,
+      child: Center(
+        child: DragTarget<HeroData>(
         onWillAcceptWithDetails: (details) => true,
         onAcceptWithDetails: (details) {
           setState(() {
@@ -85,12 +125,9 @@ class MapViewState extends State<MapView> {
           return Stack(
             key: _mapKey,
             children: [
-              Center(
-                child: Image.asset(
-                  'assets/BlizzardWorld.jpg',
-                  fit: BoxFit.contain,
-                ),
-              ),
+              Image.asset("assets/BlizzardWorld.jpg"),
+
+              
               // Render placed heroes as smaller icons (1/4 size)
               ..._heroesOnMap.map((hero) => Positioned(
                     left: hero.position.dx,
@@ -115,8 +152,13 @@ class MapViewState extends State<MapView> {
           );
         },
       ),
+      ),
     );
   }
+  
+  @override
+  // TODO: implement restorationId
+  String? get restorationId =>  'map_view';
 }
 
 class ControlPanel extends StatefulWidget {
